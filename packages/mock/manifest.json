@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Mock Data Tool",
+  "version": "1.0.0",
+  "description": "A powerful mock data tool for Chrome",
+  "icons": {
+    "16": "icons/icon.svg",
+    "48": "icons/icon.svg",
+    "128": "icons/icon.svg"
+  },
+  "permissions": [
+    "webRequest",
+    "declarativeNetRequest",
+    "storage",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Mock Data Tool"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

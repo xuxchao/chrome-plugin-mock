@@ -1,0 +1,17 @@
+{
+  "name": "chrome-plugin-mock",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "watch": "vite build --watch",
+    "typecheck": "tsc -w --noEmit",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "json-beautify": "^1.1.1",
+    "vue-json-editor": "^1.4.3"
+  }
+}

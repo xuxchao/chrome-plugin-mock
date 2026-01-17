@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DNR 规则管理</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8f9fa;
+      width: 380px;
+      padding: 16px;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    
+    .header h1 {
+      font-size: 18px;
+      color: #333;
+      margin-bottom: 4px;
+    }
+    
+    .header p {
+      font-size: 12px;
+      color: #888;
+    }
+    
+    .section {
+      background: white;
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .section-title::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      background: #4CAF50;
+      border-radius: 2px;
+    }
+    
+    .form-group {
+      margin-bottom: 10px;
+    }
+    
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+    
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    
+    .form-group input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 13px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    
+    .form-group input:focus {
+      outline: none;
+      border-color: #4CAF50;
+      box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    
+    button {
+      flex: 1;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: #4CAF50;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #43A047;
+      transform: translateY(-1px);
+    }
+    
+    .btn-danger {
+      background: #f44336;
+      color: white;
+    }
+    
+    .btn-danger:hover {
+      background: #e53935;
+      transform: translateY(-1px);
+    }
+    
+    .btn-warning {
+      background: #ff9800;
+      color: white;
+    }
+    
+    .btn-warning:hover {
+      background: #f57c00;
+      transform: translateY(-1px);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .rules-display {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    .rules-display pre {
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 11px;
+      background: #f5f5f5;
+      padding: 10px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #333;
+      line-height: 1.5;
+    }
+    
+    .status {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-top: 10px;
+      display: none;
+    }
+    
+    .status.success {
+      background: #e8f5e9;
+      color: #2e7d32;
+      display: block;
+    }
+    
+    .status.error {
+      background: #ffebee;
+      color: #c62828;
+      display: block;
+    }
+    
+    .empty-text {
+      color: #999;
+      font-size: 12px;
+      text-align: center;
+      padding: 20px;
+    }
+    
+    .hint {
+      font-size: 11px;
+      color: #999;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>DNR 规则管理</h1>
+    <p>管理 Chrome 声明式网络请求规则</p>
+  </div>
+  
+  <div class="section">
+    <div class="section-title">添加规则</div>
+    
+    <div class="form-group">
+      <label for="rule-id">规则 ID</label>
+      <input type="number" id="rule-id" value="1001" min="1" max="999999" placeholder="输入规则 ID" />
+    </div>
+    
+    <div class="form-group">
+      <label for="url-filter">URL 过滤条件</label>
+      <input type="text" id="url-filter" value="https://jsonplaceholder.typicode.com/posts?_limit=2" placeholder="例如: https://example.com/api/*" />
+    </div>
+    
+    <div class="form-group">
+      <label for="redirect-url">重定向 URL（JSON 数据）</label>
+      <input type="text" id="redirect-url" value='data:application/json,[{"userId":1,"id":1,"title":"Mock","body":"Data"}]' placeholder="data:application/json,{}" />
+    </div>
+    
+    <p class="hint">提示：使用 * 作为通配符匹配多个 URL</p>
+    
+    <div class="button-group">
+      <button class="btn-primary" id="add-btn">添加规则</button>
+      <button class="btn-danger" id="remove-btn">删除规则</button>
+    </div>
+  </div>
+  
+  <div class="section">
+    <div class="section-title">操作</div>
+    <div class="button-group">
+      <button class="btn-warning" id="clear-btn" style="flex: 1;">清除所有规则</button>
+      <button class="btn-primary" id="refresh-btn" style="flex: 1;">刷新列表</button>
+    </div>
+  </div>
+  
+  <div class="section">
+    <div class="section-title">当前规则列表</div>
+    <div class="rules-display" id="rules-display">
+      <pre id="rules-content">点击"刷新列表"查看当前规则</pre>
+    </div>
+  </div>
+  
+  <div class="status" id="status"></div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
