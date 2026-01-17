@@ -1,15 +1,15 @@
 // 日志工具函数
 const mockLogger = {
   log: (...args: any[]) => {
-    console.log('%c[MOCK] ', 'color: #3498db; font-weight: bold; font-size: 12px;', ...args);
+    console.log('%c[MOCK background] ', 'color: #3498db; font-weight: bold; font-size: 12px;', ...args);
     sendToPageConsole('log', args);
   },
   error: (...args: any[]) => {
-    console.error('%c[MOCK] ', 'color: #e74c3c; font-weight: bold; font-size: 12px;', ...args);
+    console.error('%c[MOCK background] ', 'color: #e74c3c; font-weight: bold; font-size: 12px;', ...args);
     sendToPageConsole('error', args);
   },
   warn: (...args: any[]) => {
-    console.warn('%c[MOCK] ', 'color: #f39c12; font-weight: bold; font-size: 12px;', ...args);
+    console.warn('%c[MOCK background] ', 'color: #f39c12; font-weight: bold; font-size: 12px;', ...args);
     sendToPageConsole('warn', args);
   }
 };
@@ -44,6 +44,7 @@ interface RecordedData {
 interface PathItem {
   path: string;
   recordEnabled: boolean;
+  mockEnabled: boolean;
 }
 
 interface StorageResult {
@@ -97,9 +98,12 @@ const parsePaths = (paths: PathItem[] | string[] | undefined): PathItem[] => {
     return [];
   }
   if (paths.length > 0 && typeof paths[0] === 'object' && 'path' in paths[0]) {
-    return paths as PathItem[];
+    return (paths as PathItem[]).map(p => ({
+      ...p,
+      mockEnabled: typeof p.mockEnabled === 'boolean' ? p.mockEnabled : true
+    }));
   }
-  return (paths as string[]).map((path: string) => ({ path, recordEnabled: true }));
+  return (paths as string[]).map((path: string) => ({ path, recordEnabled: true, mockEnabled: true }));
 };
 
 // 加载设置
@@ -111,7 +115,7 @@ chrome.storage.local.get(['mockEnabled', 'recordEnabled', 'recordedData', 'domai
     domains: toArray<string>(result.domains),
     paths: parsePaths(toArray<PathItem>(result.paths))
   };
-  
+
   mockLogger.log('设置已加载:', settings);
   updateMockRules();
 });
@@ -119,7 +123,7 @@ chrome.storage.local.get(['mockEnabled', 'recordEnabled', 'recordedData', 'domai
 // 监听设置变化
 chrome.storage.onChanged.addListener((changes: StorageChanges) => {
   let needUpdateRules = false;
-  
+
   if (changes.mockEnabled) {
     settings.mockEnabled = typeof changes.mockEnabled.newValue === 'boolean' ? changes.mockEnabled.newValue : false;
     needUpdateRules = true;
@@ -136,12 +140,13 @@ chrome.storage.onChanged.addListener((changes: StorageChanges) => {
     needUpdateRules = true;
   }
   if (changes.paths) {
-    settings.paths = parsePaths(changes.paths.newValue as PathItem[] | string[]);
+    mockLogger.log('paths 变化:', settings.paths, changes.paths.newValue);
+    settings.paths = parsePaths(toArray<PathItem>(changes.paths.newValue as PathItem[] | string[]));
     needUpdateRules = true;
   }
-  
+
   mockLogger.log('设置已更新:', settings);
-  
+
   if (needUpdateRules) {
     updateMockRules();
   }
@@ -150,21 +155,21 @@ chrome.storage.onChanged.addListener((changes: StorageChanges) => {
 // 生成 mock 规则
 function generateMockRules(): chrome.declarativeNetRequest.Rule[] {
   const rules: chrome.declarativeNetRequest.Rule[] = [];
-  
+
   if (!settings.mockEnabled) {
     return rules;
   }
 
   let ruleId = 1;
-  
+
   for (const domain of settings.domains) {
     for (const pathItem of settings.paths) {
       const path = pathItem.path;
       const key = `${domain}${path}`;
-      if (settings.recordedData[key]) {
+      if (pathItem.mockEnabled && settings.recordedData[key]) {
         const mockData = settings.recordedData[key].response;
         const urlPattern = `*://${domain}${path}*`;
-        
+
         rules.push({
           id: ruleId++,
           priority: 1,
@@ -182,14 +187,14 @@ function generateMockRules(): chrome.declarativeNetRequest.Rule[] {
       }
     }
   }
-  
+
   return rules;
 }
 
 // 更新 mock 规则
 function updateMockRules() {
   const rules = generateMockRules();
-  
+
   return chrome.declarativeNetRequest.getDynamicRules()
     .then((existingRules) => {
       const existingRuleIds = existingRules.map(r => r.id);
@@ -208,6 +213,10 @@ function updateMockRules() {
 
 chrome.webRequest.onCompleted.addListener(
   (details: chrome.webRequest.OnResponseStartedDetails) => {
+    const initiator = details.initiator || '';
+    if (initiator.startsWith('chrome-extension://')) {
+      return;
+    }
     const url = new URL(details.url);
     const domain = url.hostname;
     const path = url.pathname;
@@ -222,31 +231,33 @@ chrome.webRequest.onCompleted.addListener(
     const isPathMatched = !!pathItem;
 
     if (recordEnabled && isDomainMatched && isPathMatched && pathItem?.recordEnabled) {
+
+
       fetch(details.url, {
         method: details.method,
         headers: {},
       })
-      .then(response => response.json())
-      .then(data => {
-        const key = `${domain}${path}`;
-        const updatedData = {
-          ...recordedData,
-          [key]: {
-            url: details.url,
-            method: details.method,
-            request: {},
-            response: data,
-            timestamp: Date.now()
-          }
-        };
+        .then(response => response.json())
+        .then(data => {
+          const key = `${domain}${path}`;
+          const updatedData = {
+            ...recordedData,
+            [key]: {
+              url: details.url,
+              method: details.method,
+              request: {},
+              response: data,
+              timestamp: Date.now()
+            }
+          };
 
-        mockLogger.log('数据更新', domain, path, updatedData[key]);
+          mockLogger.log('数据更新', domain, path, updatedData[key]);
 
-        chrome.storage.local.set({ recordedData: updatedData });
-      })
-      .catch(err => {
-        mockLogger.error('Failed to record response:', err);
-      });
+          chrome.storage.local.set({ recordedData: updatedData });
+        })
+        .catch(err => {
+          mockLogger.error('Failed to record response:', err);
+        });
     }
   },
   { urls: ['<all_urls>'] },

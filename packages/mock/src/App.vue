@@ -43,6 +43,7 @@ const newDomain = ref('');
 interface PathItem {
   path: string;
   recordEnabled: boolean;
+  mockEnabled: boolean;
 }
 const paths = ref<PathItem[]>([]);
 const newPath = ref('');
@@ -85,6 +86,10 @@ const loadSettings = () => {
     const parsedDomains = toArray<string>(result.domains);
     
     let parsedPaths: PathItem[] = toArray(result.paths);
+    parsedPaths = parsedPaths.map(p => ({
+      ...p,
+      mockEnabled: typeof p.mockEnabled === 'boolean' ? p.mockEnabled : true
+    }));
     
     domains.value = parsedDomains;
     paths.value = parsedPaths;
@@ -94,7 +99,7 @@ const loadSettings = () => {
     
     mockLogger.log('加载设置完成:', {
       domains: domains.value,
-      paths: paths.value.map(p => p.path),
+      paths: paths.value,
       recordEnabled: recordEnabled.value,
       mockEnabled: mockEnabled.value,
       recordedData: Object.keys(recordedData.value)
@@ -154,7 +159,7 @@ const addPath = () => {
   mockLogger.log('=== 点击添加路径按钮 ===');
   mockLogger.log('添加路径前:', paths.value.map(p => p.path), '新路径:', newPath.value);
   if (newPath.value && !paths.value.some(p => p.path === newPath.value)) {
-    paths.value.push({ path: newPath.value, recordEnabled: true });
+    paths.value.push({ path: newPath.value, recordEnabled: true, mockEnabled: true });
     mockLogger.log('添加路径后:', paths.value.map(p => p.path));
     newPath.value = '';
     saveSettings();
@@ -173,6 +178,11 @@ const removePath = (path: string) => {
 
 const onPathRecordEnabledChange = (path: PathItem) => {
   mockLogger.log('=== 路径数据记录开关状态变化 ===', path);
+  saveSettings();
+};
+
+const onPathMockEnabledChange = (path: PathItem) => {
+  mockLogger.log('=== 路径 mock 拦截开关状态变化 ===', path);
   saveSettings();
 };
 
@@ -309,6 +319,16 @@ const onMockEnabledChange = () => {
                   type="checkbox" 
                   class="toggle-switch"
                   @change="onPathRecordEnabledChange(pathItem)"
+                />
+                <span class="toggle-slider"></span>
+              </label>
+              <label class="path-switch-label">
+                <span class="path-switch-text">拦截</span>
+                <input 
+                  v-model="pathItem.mockEnabled" 
+                  type="checkbox" 
+                  class="toggle-switch"
+                  @change="onPathMockEnabledChange(pathItem)"
                 />
                 <span class="toggle-slider"></span>
               </label>

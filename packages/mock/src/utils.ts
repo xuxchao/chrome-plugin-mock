@@ -1,14 +1,14 @@
 export const mockLogger = {
   log: (...args: any[]) => {
-    console.log('%c[MOCK] ', 'color: #3498db; font-weight: bold; font-size: 12px;', ...args);
+    console.log('%c[MOCK contentjs] ', 'color: #3498db; font-weight: bold; font-size: 12px;', ...args);
     sendToPageConsole('log', args);
   },
   error: (...args: any[]) => {
-    console.error('%c[MOCK] ', 'color: #e74c3c; font-weight: bold; font-size: 12px;', ...args);
+    console.error('%c[MOCK contentjs] ', 'color: #e74c3c; font-weight: bold; font-size: 12px;', ...args);
     sendToPageConsole('error', args);
   },
   warn: (...args: any[]) => {
-    console.warn('%c[MOCK] ', 'color: #f39c12; font-weight: bold; font-size: 12px;', ...args);
+    console.warn('%c[MOCK contentjs] ', 'color: #f39c12; font-weight: bold; font-size: 12px;', ...args);
     sendToPageConsole('warn', args);
   }
 };
