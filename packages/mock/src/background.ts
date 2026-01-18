@@ -272,9 +272,9 @@ chrome.webRequest.onBeforeRedirect.addListener((details) => {
 }, { urls: ['<all_urls>']},
 )
 
-chrome.webRequest.onCompleted.addListener(
-  (details: chrome.webRequest.OnResponseStartedDetails) => {
-    // mockLogger.log('onCompleted', details.url, details)
+chrome.webRequest.onBeforeSendHeaders.addListener(
+  (details: chrome.webRequest.OnBeforeSendHeadersDetails) => {
+
     const initiator = details.initiator || '';
     if (initiator.startsWith('chrome-extension://')) {
       return;
@@ -294,10 +294,18 @@ chrome.webRequest.onCompleted.addListener(
 
     if (recordEnabled && isDomainMatched && isPathMatched && pathItem?.recordEnabled) {
 
+      const requestHeadersObj: Record<string, string> = {};
+      if (details.requestHeaders) {
+        details.requestHeaders.forEach(header => {
+          if (header.name && header.value) {
+            requestHeadersObj[header.name] = header.value;
+          }
+        });
+      }
 
       fetch(details.url, {
         method: details.method,
-        headers: {},
+        headers: requestHeadersObj,
       })
         .then(response => response.json())
         .then(data => {
@@ -319,9 +327,20 @@ chrome.webRequest.onCompleted.addListener(
           mockLogger.error('Failed to record response:', err);
         });
     }
+    
+    return undefined
   },
   { urls: ['<all_urls>'] },
-  ['responseHeaders']
+  ['requestHeaders']
 );
+
+// chrome.webRequest.onCompleted.addListener(
+//   (details: chrome.webRequest.OnResponseStartedDetails) => {
+//     // mockLogger.log('onCompleted', details.url, details)
+    
+//   },
+//   { urls: ['<all_urls>'] },
+//   ['responseHeaders']
+// );
 
 
