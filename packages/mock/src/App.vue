@@ -78,9 +78,9 @@ const toArray = <T>(value: any): T[] => {
 // 加载设置
 const loadSettings = () => {
   isLoadingSettings.value = true;
-  mockLogger.log('开始加载设置...');
+  // mockLogger.log('开始加载设置...');
   chrome.storage.local.get(['domains', 'paths', 'recordEnabled', 'mockEnabled', 'recordedData'], (result: StorageResult) => {
-    mockLogger.log('从存储加载的数据:', result);
+    // mockLogger.log('从存储加载的数据:', result);
 
     
     const parsedDomains = toArray<string>(result.domains);
@@ -114,13 +114,13 @@ const saveSettings = () => {
     mockLogger.log('正在加载设置，跳过保存操作');
     return;
   }
-  mockLogger.log('开始保存设置:', {
-    domains: domains.value,
-    paths: paths.value,
-    recordEnabled: recordEnabled.value,
-    mockEnabled: mockEnabled.value,
-    recordedData: recordedData.value
-  });
+  // mockLogger.log('开始保存设置:', {
+  //   domains: domains.value,
+  //   paths: paths.value,
+  //   recordEnabled: recordEnabled.value,
+  //   mockEnabled: mockEnabled.value,
+  //   recordedData: recordedData.value
+  // });
   chrome.storage.local.set({
     domains: domains.value,
     paths: paths.value,
@@ -128,7 +128,7 @@ const saveSettings = () => {
     mockEnabled: mockEnabled.value,
     recordedData: recordedData.value
   }, () => {
-    mockLogger.log('设置保存完成');
+    // mockLogger.log('设置保存完成');
   });
 };
 
@@ -156,11 +156,8 @@ const removeDomain = (domain: string) => {
 
 // 路径管理
 const addPath = () => {
-  mockLogger.log('=== 点击添加路径按钮 ===');
-  mockLogger.log('添加路径前:', paths.value.map(p => p.path), '新路径:', newPath.value);
   if (newPath.value && !paths.value.some(p => p.path === newPath.value)) {
     paths.value.push({ path: newPath.value, recordEnabled: true, mockEnabled: true });
-    mockLogger.log('添加路径后:', paths.value.map(p => p.path));
     newPath.value = '';
     saveSettings();
   } else {
@@ -182,27 +179,21 @@ const onPathRecordEnabledChange = (path: PathItem) => {
 };
 
 const onPathMockEnabledChange = (path: PathItem) => {
-  mockLogger.log('=== 路径 mock 拦截开关状态变化 ===', path);
   saveSettings();
 };
 
 // 数据管理
 const selectData = (key: string) => {
-  mockLogger.log('=== 点击选择数据按钮 ===');
-  mockLogger.log('选择数据:', key);
   selectedKey.value = key;
   const data = recordedData.value[key];
   if (data) {
     editJson.value = JSON.stringify(data.response, null, 2);
-    mockLogger.log('数据加载到编辑器:', data.url);
   } else {
     mockLogger.log('未找到数据:', key);
   }
 };
 
 const formatJson = () => {
-  mockLogger.log('=== 点击格式化按钮 ===');
-  mockLogger.log('格式化前 JSON:', editJson.value);
   try {
     const parsed = JSON.parse(editJson.value);
     editJson.value = JSON.stringify(parsed, null, 2);
@@ -237,25 +228,21 @@ const saveMockData = () => {
 
 // 监听存储变化
 chrome.storage.onChanged.addListener((changes: StorageChanges, namespace: string) => {
-  mockLogger.log('=== 存储变化事件 ===', { changes, namespace });
   // 重新加载所有设置，确保与存储保持同步
   loadSettings();
 });
 
 // 初始化
 onMounted(() => {
-  mockLogger.log('=== 插件初始化 ===');
   loadSettings();
 });
 
 // 监听开关状态变化
 const onRecordEnabledChange = () => {
-  mockLogger.log('=== 数据记录开关状态变化 ===', { newState: recordEnabled.value });
   saveSettings();
 };
 
 const onMockEnabledChange = () => {
-  mockLogger.log('=== 接口模拟开关状态变化 ===', { newState: mockEnabled.value });
   saveSettings();
 };
 </script>

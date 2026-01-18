@@ -1,9 +1,9 @@
-console.log('%c[MOCK] ', 'color: #3498db; font-weight: bold; font-size: 12px;', 'Mock Data Tool Content Script Loaded');
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === 'LOG_TO_PAGE') {
+console.log('%c[MOCK CONTENT] ', 'color: #3498db; font-weight: bold; font-size: 12px;', new Date().toLocaleString());
+
+chrome.runtime.onMessage.addListener((message, send, sendMessage) => {
     const { type, args } = message.payload;
-    const prefix = '%c[MOCK] ';
+    const prefix = `%c[MOCK ${message.type}] `;
     const style = 'color: #3498db; font-weight: bold; font-size: 12px;';
 
     switch (type) {
@@ -17,6 +17,6 @@ chrome.runtime.onMessage.addListener((message) => {
         console.warn(prefix, style, ...args);
         break;
     }
-  }
+    // sendMessage({ type: 'POPUP', payload: { message: "CONTENT" } });
   return false;
 });

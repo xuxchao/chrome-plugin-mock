@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "演示Chrome扩展中各种组件之间的通讯方式",
   "icons": {
-    "16": "icons/icon16.svg",
+    "16": "icons/icon16.png",
     "48": "icons/icon48.svg",
     "128": "icons/icon128.svg"
   },

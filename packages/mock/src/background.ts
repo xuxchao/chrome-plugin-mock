@@ -1,25 +1,32 @@
 // 日志工具函数
 const mockLogger = {
   log: (...args: any[]) => {
-    console.log('%c[MOCK background] ', 'color: #3498db; font-weight: bold; font-size: 12px;', ...args);
+    // console.log('%c[MOCK background] ', 'color: #3498db; font-weight: bold; font-size: 12px;', ...args);
     sendToPageConsole('log', args);
   },
   error: (...args: any[]) => {
-    console.error('%c[MOCK background] ', 'color: #e74c3c; font-weight: bold; font-size: 12px;', ...args);
+    // console.error('%c[MOCK background] ', 'color: #e74c3c; font-weight: bold; font-size: 12px;', ...args);
     sendToPageConsole('error', args);
   },
   warn: (...args: any[]) => {
-    console.warn('%c[MOCK background] ', 'color: #f39c12; font-weight: bold; font-size: 12px;', ...args);
+    // console.warn('%c[MOCK background] ', 'color: #f39c12; font-weight: bold; font-size: 12px;', ...args);
     sendToPageConsole('warn', args);
   }
 };
 
 function sendToPageConsole(type: 'log' | 'error' | 'warn', args: any[]) {
-  chrome.runtime.sendMessage({
-    type: 'LOG_TO_PAGE',
+  const message = {
+    type: 'BACKGROUND',
     payload: { type, args }
-  }).catch(() => {
-    // 静默处理：接收方不存在（content script 未加载或无活动标签页）
+  };
+  
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    tabs.forEach((tab) => {
+      if(!tab.id) return;
+      chrome.tabs.sendMessage(tab.id, message).catch(() => {
+        // 静默处理：接收方不存在（content script 未加载或无活动标签页）
+      });
+    });
   });
 }
 
@@ -72,6 +79,33 @@ let settings = {
   paths: [] as PathItem[]
 };
 
+// 拦截计数器和Badge管理
+let blockedCount = 0;
+
+function updateBadge(count: number) {
+  const text = count > 0 ? count.toString() : '';
+  const color = count > 0 ? '#ff4444' : undefined;
+  chrome.action.setBadgeText({ text });
+  if (color) {
+    chrome.action.setBadgeBackgroundColor({ color });
+  }
+}
+
+function incrementBlockedCount() {
+  blockedCount++;
+  updateBadge(blockedCount);
+}
+
+function clearBlockedCount() {
+  blockedCount = 0;
+  updateBadge(0);
+}
+
+// 监听 popup 打开，清除 badge
+chrome.action.onClicked.addListener(() => {
+  clearBlockedCount();
+});
+
 // 辅助函数：将值转换为数组
 const toArray = <T>(value: any): T[] => {
   if (Array.isArray(value)) {
@@ -116,39 +150,34 @@ chrome.storage.local.get(['mockEnabled', 'recordEnabled', 'recordedData', 'domai
     paths: parsePaths(toArray<PathItem>(result.paths))
   };
 
-  mockLogger.log('设置已加载:', settings);
   updateMockRules();
 });
 
 // 监听设置变化
 chrome.storage.onChanged.addListener((changes: StorageChanges) => {
-  let needUpdateRules = false;
 
   if (changes.mockEnabled) {
+    mockLogger.log('MOCK 拦截发生变化', changes.mockEnabled.newValue);
     settings.mockEnabled = typeof changes.mockEnabled.newValue === 'boolean' ? changes.mockEnabled.newValue : false;
-    needUpdateRules = true;
+    updateMockRules();
   }
   if (changes.recordEnabled) {
+    mockLogger.log('RECORD 拦截发生变化', changes.recordEnabled.newValue);
     settings.recordEnabled = typeof changes.recordEnabled.newValue === 'boolean' ? changes.recordEnabled.newValue : false;
   }
   if (changes.recordedData) {
+    mockLogger.log('RECORD 数据发生变化');
     settings.recordedData = typeof changes.recordedData.newValue === 'object' && changes.recordedData.newValue !== null ? changes.recordedData.newValue as RecordedData : {} as RecordedData;
-    needUpdateRules = true;
   }
   if (changes.domains) {
+    mockLogger.log('DOMAIN 发生变化', changes.domains.newValue);
     settings.domains = toArray<string>(changes.domains.newValue);
-    needUpdateRules = true;
+    updateMockRules();
   }
   if (changes.paths) {
-    mockLogger.log('paths 变化:', settings.paths, changes.paths.newValue);
-    settings.paths = parsePaths(toArray<PathItem>(changes.paths.newValue as PathItem[] | string[]));
-    needUpdateRules = true;
-  }
-
-  mockLogger.log('设置已更新:', settings);
-
-  if (needUpdateRules) {
+    mockLogger.log('PATH 发生变化', changes.paths.newValue);
     updateMockRules();
+    settings.paths = parsePaths(toArray<PathItem>(changes.paths.newValue as PathItem[] | string[]));
   }
 });
 
@@ -174,9 +203,10 @@ function generateMockRules(): chrome.declarativeNetRequest.Rule[] {
           id: ruleId++,
           priority: 1,
           action: {
-            type: 'redirect' as const,
+            // type: 'redirect' as const,
+            type: 'redirect',
             redirect: {
-              url: `data:application/json,${encodeURIComponent(JSON.stringify(mockData))}`
+              url: `data:application/json,${encodeURIComponent(JSON.stringify(mockData))}`,
             }
           },
           condition: {
@@ -210,9 +240,41 @@ function updateMockRules() {
       mockLogger.error('更新 mock 规则失败:', err);
     });
 }
+// 监听规则匹配（用于记录被拦截的请求）
+// chrome.declarativeNetRequest.onRuleMatchedDebug?.addListener((info) => {
+//   const request = info.request;
+//   const rule = info.rule;
+
+//   const blockedLog = {
+//     url: request.url,
+//     type: request.type,
+//     method: request.method || 'GET',
+//     initiator: request.initiator || '',
+//     ruleId: rule.ruleId,
+//     timestamp: Date.now()
+//   };
+
+//   mockLogger.log('请求被拦截:', blockedLog);
+// });
+
+// chrome.webRequest.onBeforeRequest.addListener((details) => {
+//   return undefined;
+// }, { urls: ['<all_urls>'] },
+// )
+
+
+chrome.webRequest.onBeforeRedirect.addListener((details) => {
+  if(details.redirectUrl.startsWith('data:application/json')){
+    mockLogger.warn('当前请求被拦截:', details.url);
+    incrementBlockedCount();
+  }
+  return undefined;
+}, { urls: ['<all_urls>']},
+)
 
 chrome.webRequest.onCompleted.addListener(
   (details: chrome.webRequest.OnResponseStartedDetails) => {
+    // mockLogger.log('onCompleted', details.url, details)
     const initiator = details.initiator || '';
     if (initiator.startsWith('chrome-extension://')) {
       return;
@@ -251,8 +313,6 @@ chrome.webRequest.onCompleted.addListener(
             }
           };
 
-          mockLogger.log('数据更新', domain, path, updatedData[key]);
-
           chrome.storage.local.set({ recordedData: updatedData });
         })
         .catch(err => {
@@ -265,5 +325,3 @@ chrome.webRequest.onCompleted.addListener(
 );
 
 
-// 添加一个当前时间的打印，格式需要是年月日时分秒
-mockLogger.log('1当前时间:', new Date().toLocaleString());
