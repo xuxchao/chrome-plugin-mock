@@ -57,7 +57,7 @@ interface PathItem {
 interface StorageResult {
   mockEnabled?: boolean;
   recordEnabled?: boolean;
-  recordedData?: RecordedData;
+  recordedData?: string;
   domains?: string[];
   paths?: PathItem[] | string[];
 }
@@ -78,6 +78,9 @@ let settings = {
   domains: [] as string[],
   paths: [] as PathItem[]
 };
+
+// 请求体存储
+const requestBodyMap = new Map<string, string>();
 
 // 拦截计数器和Badge管理
 let blockedCount = 0;
@@ -145,7 +148,7 @@ chrome.storage.local.get(['mockEnabled', 'recordEnabled', 'recordedData', 'domai
   settings = {
     mockEnabled: typeof result.mockEnabled === 'boolean' ? result.mockEnabled : false,
     recordEnabled: typeof result.recordEnabled === 'boolean' ? result.recordEnabled : false,
-    recordedData: typeof result.recordedData === 'object' && result.recordedData !== null ? result.recordedData as RecordedData : {} as RecordedData,
+    recordedData: result.recordedData ? JSON.parse(result.recordedData as string) : {},
     domains: toArray<string>(result.domains),
     paths: parsePaths(toArray<PathItem>(result.paths))
   };
@@ -305,7 +308,9 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
 
       fetch(details.url, {
         method: details.method,
+        
         headers: requestHeadersObj,
+        body: details.documentId ? requestBodyMap.get(details.documentId): undefined,
       })
         .then(response => response.json())
         .then(data => {
@@ -321,17 +326,68 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
             }
           };
 
-          chrome.storage.local.set({ recordedData: updatedData });
+          chrome.storage.local.set({ recordedData: JSON.stringify(updatedData) });
         })
         .catch(err => {
           mockLogger.error('Failed to record response:', err);
-        });
+        }).finally(() => {
+          if(details.documentId) {
+            requestBodyMap.delete(details.documentId);
+          }
+
+        })
     }
     
     return undefined
   },
   { urls: ['<all_urls>'] },
   ['requestHeaders']
+);
+
+// background.js
+chrome.webRequest.onBeforeRequest.addListener(
+  function(details) {
+    const url = new URL(details.url);
+    const domain = url.hostname;
+    const path = url.pathname;
+
+    const recordEnabled = settings.recordEnabled;
+    const currentDomains = settings.domains;
+    const currentPathItems = settings.paths;
+
+    const isDomainMatched = currentDomains.includes(domain);
+    const pathItem = currentPathItems.find(p => p.path === path);
+    const isPathMatched = !!pathItem;
+
+    if (!recordEnabled || !isDomainMatched || !isPathMatched || !pathItem?.recordEnabled) {
+      return undefined;
+    }
+
+    if (details.requestBody) {
+      if (details.requestBody.raw) {
+        const chunks: string[] = [];
+        details.requestBody.raw.forEach(item => {
+          const decoder = new TextDecoder('utf-8');
+          const bodyString = decoder.decode(item.bytes);
+          chunks.push(bodyString);
+        });
+        if(details.documentId) {
+          requestBodyMap.set(details.documentId, chunks.join(''));
+          // mockLogger.log('Request Body:', chunks.join(''));
+        }
+      }
+      if (details.requestBody.formData) {
+        if(details.documentId) {
+          // mockLogger.log('Form Data:', details.requestBody.formData);
+          requestBodyMap.set(details.documentId, JSON.stringify(details.requestBody.formData));
+        }
+      }
+    }
+    
+    return undefined
+  },
+  { urls: ["<all_urls>"] },
+  ["requestBody"]
 );
 
 // chrome.webRequest.onCompleted.addListener(

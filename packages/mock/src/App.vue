@@ -95,7 +95,7 @@ const loadSettings = () => {
     paths.value = parsedPaths;
     recordEnabled.value = typeof result.recordEnabled === 'boolean' ? result.recordEnabled : false;
     mockEnabled.value = typeof result.mockEnabled === 'boolean' ? result.mockEnabled : false;
-    recordedData.value = typeof result.recordedData === 'object' && result.recordedData !== null ? result.recordedData as RecordedData : {} as RecordedData;
+    recordedData.value = result.recordedData ? JSON.parse(result.recordedData as string) : {} as RecordedData;
     
     mockLogger.log('加载设置完成:', {
       domains: domains.value,
@@ -126,7 +126,7 @@ const saveSettings = () => {
     paths: paths.value,
     recordEnabled: recordEnabled.value,
     mockEnabled: mockEnabled.value,
-    recordedData: recordedData.value
+    recordedData: JSON.stringify(recordedData.value)
   }, () => {
     // mockLogger.log('设置保存完成');
   });
@@ -216,7 +216,7 @@ const saveMockData = () => {
     mockLogger.log('保存的数据:', parsed);
     const record = recordedData.value[selectedKey.value] as NonNullable<typeof recordedData.value[string]>;
     record.response = parsed;
-    chrome.storage.local.set({ recordedData: recordedData.value }, () => {
+    chrome.storage.local.set({ recordedData: JSON.stringify(recordedData.value) }, () => {
       mockLogger.log('Mock 数据保存成功');
       alert('保存成功');
     });
