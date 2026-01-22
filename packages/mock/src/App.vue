@@ -19,12 +19,23 @@ interface RecordedData {
   };
 }
 
+interface PathItem {
+  path: string;
+  recordEnabled: boolean;
+  mockEnabled: boolean;
+}
+
+interface DomainItem {
+  domain: string;
+  expanded: boolean;
+  paths: PathItem[];
+}
+
 interface StorageResult {
   mockEnabled?: boolean;
   recordEnabled?: boolean;
   recordedData?: RecordedData;
-  domains?: string[];
-  paths?: string[];
+  domains?: DomainItem[];
 }
 
 interface StorageChanges {
@@ -32,34 +43,23 @@ interface StorageChanges {
   recordEnabled?: chrome.storage.StorageChange;
   recordedData?: chrome.storage.StorageChange;
   domains?: chrome.storage.StorageChange;
-  paths?: chrome.storage.StorageChange;
 }
 
 import { mockLogger } from './utils';
 
 // 状态管理
-const domains = ref<string[]>([]);
+const domains = ref<DomainItem[]>([]);
 const newDomain = ref('');
 const domainSearch = ref('');
 
-interface PathItem {
-  path: string;
-  recordEnabled: boolean;
-  mockEnabled: boolean;
-}
-const paths = ref<PathItem[]>([]);
-const newPath = ref('');
-const pathSearch = ref('');
-
 const filteredDomains = computed(() => {
   if (!domainSearch.value) return domains.value;
-  return domains.value.filter(d => d.toLowerCase().includes(domainSearch.value.toLowerCase()));
+  return domains.value.filter(d => 
+    d.domain.toLowerCase().includes(domainSearch.value.toLowerCase()) ||
+    d.paths.some(p => p.path.toLowerCase().includes(domainSearch.value.toLowerCase()))
+  );
 });
 
-const filteredPaths = computed(() => {
-  if (!pathSearch.value) return paths.value;
-  return paths.value.filter(p => p.path.toLowerCase().includes(pathSearch.value.toLowerCase()));
-});
 const recordEnabled = ref(false);
 const mockEnabled = ref(false);
 const recordedData = ref<RecordedData>({});
@@ -67,52 +67,20 @@ const selectedKey = ref('');
 const editJson = ref('');
 // 防止死循环的标志
 const isLoadingSettings = ref(false);
-
-// 辅助函数：将值转换为数组
-const toArray = <T>(value: any): T[] => {
-  if (Array.isArray(value)) {
-    return value as T[];
-  }
-  if (typeof value === 'object' && value !== null) {
-    if ('length' in value && typeof value.length === 'number') {
-      const arr: T[] = [];
-      for (let i = 0; i < value.length; i++) {
-        if (i in value) {
-          arr.push(value[i]);
-        }
-      }
-      return arr;
-    }
-    return Object.values(value) as T[];
-  }
-  return [];
-};
+// 路径输入框引用
+const pathInputRefs = ref<Record<string, HTMLInputElement>>({});
 
 // 加载设置
 const loadSettings = () => {
   isLoadingSettings.value = true;
-  // mockLogger.log('开始加载设置...');
-  chrome.storage.local.get(['domains', 'paths', 'recordEnabled', 'mockEnabled', 'recordedData'], (result: StorageResult) => {
-    // mockLogger.log('从存储加载的数据:', result);
-
-    
-    const parsedDomains = toArray<string>(result.domains);
-    
-    let parsedPaths: PathItem[] = toArray(result.paths);
-    parsedPaths = parsedPaths.map(p => ({
-      ...p,
-      mockEnabled: typeof p.mockEnabled === 'boolean' ? p.mockEnabled : true
-    }));
-    
-    domains.value = parsedDomains;
-    paths.value = parsedPaths;
+  chrome.storage.local.get(['domains', 'recordEnabled', 'mockEnabled', 'recordedData'], (result: StorageResult) => {
+    domains.value = result.domains ? JSON.parse(result.domains as string) : [];
     recordEnabled.value = typeof result.recordEnabled === 'boolean' ? result.recordEnabled : false;
     mockEnabled.value = typeof result.mockEnabled === 'boolean' ? result.mockEnabled : false;
     recordedData.value = result.recordedData ? JSON.parse(result.recordedData as string) : {} as RecordedData;
     
     mockLogger.log('加载设置完成:', {
       domains: domains.value,
-      paths: paths.value,
       recordEnabled: recordEnabled.value,
       mockEnabled: mockEnabled.value,
       recordedData: Object.keys(recordedData.value)
@@ -127,16 +95,8 @@ const saveSettings = () => {
     mockLogger.log('正在加载设置，跳过保存操作');
     return;
   }
-  // mockLogger.log('开始保存设置:', {
-  //   domains: domains.value,
-  //   paths: paths.value,
-  //   recordEnabled: recordEnabled.value,
-  //   mockEnabled: mockEnabled.value,
-  //   recordedData: recordedData.value
-  // });
   chrome.storage.local.set({
-    domains: domains.value,
-    paths: paths.value,
+    domains: JSON.stringify(domains.value),
     recordEnabled: recordEnabled.value,
     mockEnabled: mockEnabled.value,
     recordedData: JSON.stringify(recordedData.value)
@@ -149,40 +109,50 @@ const saveSettings = () => {
 const addDomain = () => {
   mockLogger.log('=== 点击添加域名按钮 ===');
   mockLogger.log('添加域名前:', domains.value, '新域名:', newDomain.value);
-  if (newDomain.value && !domains.value.includes(newDomain.value)) {
-    domains.value.push(newDomain.value);
+  if (newDomain.value && !domains.value.some(d => d.domain === newDomain.value)) {
+    domains.value.push({
+      domain: newDomain.value,
+      expanded: true,
+      paths: []
+    });
     mockLogger.log('添加域名后:', domains.value);
     newDomain.value = '';
     saveSettings();
   } else {
-    mockLogger.log('添加域名条件不满足:', { newDomain: newDomain.value, isExists: domains.value.includes(newDomain.value) });
+    mockLogger.log('添加域名条件不满足:', { newDomain: newDomain.value, isExists: domains.value.some(d => d.domain === newDomain.value) });
   }
 };
 
 const removeDomain = (domain: string) => {
   mockLogger.log('=== 点击删除域名按钮 ===');
-  mockLogger.log('删除域名:', domain, '删除前:', domains.value);
-  domains.value = domains.value.filter(d => d !== domain);
-  mockLogger.log('删除域名后:', domains.value);
+  mockLogger.log('删除域名:', domain, '删除前:', domains.value.map(d => d.domain));
+  domains.value = domains.value.filter(d => d.domain !== domain);
+  mockLogger.log('删除域名后:', domains.value.map(d => d.domain));
   saveSettings();
 };
 
-// 路径管理
-const addPath = () => {
-  if (newPath.value && !paths.value.some(p => p.path === newPath.value)) {
-    paths.value.push({ path: newPath.value, recordEnabled: true, mockEnabled: true });
-    newPath.value = '';
+const toggleDomain = (domainItem: DomainItem) => {
+  domainItem.expanded = !domainItem.expanded;
+  saveSettings();
+};
+
+// 路径管理（在指定域名下添加路径）
+const addPath = (domainItem: DomainItem, newPathValue: string) => {
+  if (newPathValue && !domainItem.paths.some(p => p.path === newPathValue)) {
+    domainItem.paths.push({ path: newPathValue, recordEnabled: true, mockEnabled: true });
     saveSettings();
+    return true;
   } else {
-    mockLogger.log('添加路径条件不满足:', { newPath: newPath.value, isExists: paths.value.some(p => p.path === newPath.value) });
+    mockLogger.log('添加路径条件不满足:', { newPath: newPathValue, isExists: domainItem.paths.some(p => p.path === newPathValue) });
+    return false;
   }
 };
 
-const removePath = (path: string) => {
+const removePath = (domainItem: DomainItem, path: string) => {
   mockLogger.log('=== 点击删除路径按钮 ===');
-  mockLogger.log('删除路径:', path, '删除前:', paths.value.map(p => p.path));
-  paths.value = paths.value.filter(p => p.path !== path);
-  mockLogger.log('删除路径后:', paths.value.map(p => p.path));
+  mockLogger.log('删除路径:', path, '删除前:', domainItem.paths.map(p => p.path));
+  domainItem.paths = domainItem.paths.filter(p => p.path !== path);
+  mockLogger.log('删除路径后:', domainItem.paths.map(p => p.path));
   saveSettings();
 };
 
@@ -193,6 +163,26 @@ const onPathRecordEnabledChange = (path: PathItem) => {
 
 const onPathMockEnabledChange = (path: PathItem) => {
   saveSettings();
+};
+
+// 处理路径添加（通过回车键）
+const handleAddPath = (domainItem: DomainItem, event: KeyboardEvent) => {
+  const input = event.target as HTMLInputElement;
+  const value = input.value.trim();
+  if (addPath(domainItem, value)) {
+    input.value = '';
+  }
+};
+
+// 处理路径添加（通过按钮）
+const handleAddPathByButton = (domainItem: DomainItem) => {
+  const input = pathInputRefs.value[domainItem.domain];
+  if (input) {
+    const value = input.value.trim();
+    if (addPath(domainItem, value)) {
+      input.value = '';
+    }
+  }
 };
 
 // 数据管理
@@ -230,7 +220,7 @@ const saveMockData = () => {
     const record = recordedData.value[selectedKey.value] as NonNullable<typeof recordedData.value[string]>;
     record.response = parsed;
     chrome.storage.local.set({ recordedData: JSON.stringify(recordedData.value) }, () => {
-      mockLogger.log('Mock 数据保存成功');
+      mockLogger.log('Mock 数据保存成功', rerecordedData.value);
       alert('保存成功');
     });
   } catch (e) {
@@ -296,14 +286,14 @@ const onMockEnabledChange = () => {
 
     <!-- 功能区 -->
     <div class="features-grid">
-      <!-- 域名管理 -->
+      <!-- 域名管理（可折叠） -->
       <div class="feature-card">
         <div class="feature-header">
           <h2 class="feature-title">域名管理</h2>
           <input 
             v-model="domainSearch" 
             type="text" 
-            placeholder="搜索域名..." 
+            placeholder="搜索域名或路径..." 
             class="search-input"
           />
         </div>
@@ -319,67 +309,69 @@ const onMockEnabledChange = () => {
         </div>
         <div class="domain-list">
           <div 
-            v-for="domain in filteredDomains" 
-            :key="domain"
-            class="domain-item"
+            v-for="domainItem in filteredDomains" 
+            :key="domainItem.domain"
+            class="domain-card"
           >
-            <span class="domain-name" :title="domain">{{ domain }}</span>
-            <button @click="removeDomain(domain)" class="remove-btn">删除</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 路径管理 -->
-      <div class="feature-card">
-        <div class="feature-header">
-          <h2 class="feature-title">路径管理</h2>
-          <input 
-            v-model="pathSearch" 
-            type="text" 
-            placeholder="搜索路径..." 
-            class="search-input"
-          />
-        </div>
-        <div class="input-group">
-          <input 
-            v-model="newPath" 
-            type="text" 
-            placeholder="输入路径 (e.g., /api/data)" 
-            class="text-input"
-            @keyup.enter="addPath"
-          />
-          <button @click="addPath" class="add-btn">添加</button>
-        </div>
-        <div class="path-list">
-          <div 
-            v-for="pathItem in filteredPaths" 
-            :key="pathItem.path"
-            class="path-item"
-          >
-            <div class="path-info">
-              <span class="path-name" :title="pathItem.path">{{ pathItem.path }}</span>
-              <div class="path-controls">
-                <label class="path-switch-label">
-                  <span class="path-switch-text">记录</span>
-                  <input 
-                    v-model="pathItem.recordEnabled" 
-                    type="checkbox" 
-                    class="toggle-switch"
-                    @change="onPathRecordEnabledChange(pathItem)"
-                  />
-                  <span class="toggle-slider"></span>
-                </label>
-                <label class="path-switch-label">
-                  <span class="path-switch-text">拦截</span>
-                  <input 
-                    v-model="pathItem.mockEnabled" 
-                    type="checkbox" 
-                    class="toggle-switch"
-                    @change="onPathMockEnabledChange(pathItem)"
-                  />
-                  <span class="toggle-slider"></span>
-                </label>
-                <button @click="removePath(pathItem.path)" class="remove-btn">删除</button>
+            <!-- 域名头部（可折叠） -->
+            <div class="domain-header" @click="toggleDomain(domainItem)">
+              <div class="domain-header-left">
+                <span class="expand-icon" :class="{ expanded: domainItem.expanded }">▶</span>
+                <span class="domain-name" :title="domainItem.domain">{{ domainItem.domain }}</span>
+                <span class="path-count">({{ domainItem.paths.length }} 条路径)</span>
+              </div>
+              <button @click.stop="removeDomain(domainItem.domain)" class="remove-btn">删除</button>
+            </div>
+            
+            <!-- 路径列表（展开时显示） -->
+            <div v-if="domainItem.expanded" class="paths-container">
+              <!-- 添加路径输入框 -->
+              <div class="path-input-group">
+                <input 
+                  :ref="el => { if (el) pathInputRefs[domainItem.domain] = el }"
+                  type="text" 
+                  placeholder="输入路径 (e.g., /api/data)" 
+                  class="text-input path-input"
+                  @keyup.enter="handleAddPath(domainItem, $event)"
+                />
+                <button @click="handleAddPathByButton(domainItem)" class="add-btn small">添加</button>
+              </div>
+              
+              <!-- 路径列表 -->
+              <div class="path-list">
+                <div 
+                  v-for="pathItem in domainItem.paths" 
+                  :key="pathItem.path"
+                  class="path-item"
+                >
+                  <span class="path-name" :title="pathItem.path">{{ pathItem.path }}</span>
+                  <div class="path-controls">
+                    <label class="path-switch-label">
+                      <span class="path-switch-text">记录</span>
+                      <input 
+                        v-model="pathItem.recordEnabled" 
+                        type="checkbox" 
+                        class="toggle-switch"
+                        @change="onPathRecordEnabledChange(pathItem)"
+                      />
+                      <span class="toggle-slider small"></span>
+                    </label>
+                    <label class="path-switch-label">
+                      <span class="path-switch-text">拦截</span>
+                      <input 
+                        v-model="pathItem.mockEnabled" 
+                        type="checkbox" 
+                        class="toggle-switch"
+                        @change="onPathMockEnabledChange(pathItem)"
+                      />
+                      <span class="toggle-slider small"></span>
+                    </label>
+                    <button @click="removePath(domainItem, pathItem.path)" class="remove-btn small">删除</button>
+                  </div>
+                </div>
+                <div v-if="domainItem.paths.length === 0" class="empty-paths">
+                  暂无路径，请添加
+                </div>
               </div>
             </div>
           </div>
@@ -573,6 +565,11 @@ const onMockEnabledChange = () => {
   color: white;
 }
 
+.add-btn.small, .remove-btn.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
 .control-btn {
   background-color: #444;
   color: #eee;
@@ -597,13 +594,139 @@ const onMockEnabledChange = () => {
 }
 
 /* 列表样式 */
-.domain-list, .path-list {
-  max-height: 250px;
+.domain-list {
+  max-height: 450px;
   overflow-y: auto;
   padding-right: 5px;
 }
 
-.domain-item, .path-item {
+.domain-card {
+  background-color: #2d2d2d;
+  border: 1px solid #333;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.domain-card:hover {
+  border-color: #444;
+}
+
+.domain-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.domain-header:hover {
+  background-color: #333;
+}
+
+.domain-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.expand-icon {
+  font-size: 10px;
+  color: #888;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.expand-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.domain-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #eee;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.path-count {
+  font-size: 12px;
+  color: #888;
+  flex-shrink: 0;
+}
+
+.paths-container {
+  padding: 0 15px 15px 15px;
+  border-top: 1px solid #3d3d3d;
+  background-color: #262626;
+}
+
+.path-input-group {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  margin-bottom: 12px;
+}
+
+.path-input {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.path-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.path-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background-color: #2d2d2d;
+  border: 1px solid #3d3d3d;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  transition: all 0.2s ease;
+}
+
+.path-item:hover {
+  background-color: #333;
+  border-color: #444;
+}
+
+.path-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #ddd;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 10px;
+}
+
+.path-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.empty-paths {
+  text-align: center;
+  color: #666;
+  font-size: 13px;
+  padding: 20px;
+}
+
+.domain-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -615,49 +738,9 @@ const onMockEnabledChange = () => {
   transition: all 0.2s ease;
 }
 
-.domain-item:hover, .path-item:hover {
+.domain-item:hover {
   background-color: #333;
   border-color: #444;
-}
-
-.path-item {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 12px;
-}
-
-.path-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 15px;
-}
-
-.path-controls {
-  display: flex;
-  gap: 15px;
-}
-
-.domain-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #eee;
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-right: 10px;
-}
-
-.path-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #eee;
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-right: 10px;
 }
 
 .path-switch-label {
@@ -722,6 +805,22 @@ const onMockEnabledChange = () => {
 
 .toggle-switch:checked + .toggle-slider:before {
   transform: translateX(22px);
+}
+
+.toggle-slider.small {
+  width: 36px;
+  height: 18px;
+}
+
+.toggle-slider.small:before {
+  height: 12px;
+  width: 12px;
+  left: 3px;
+  bottom: 3px;
+}
+
+.toggle-switch:checked + .toggle-slider.small:before {
+  transform: translateX(18px);
 }
 
 /* 数据管理样式 */

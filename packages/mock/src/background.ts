@@ -54,12 +54,17 @@ interface PathItem {
   mockEnabled: boolean;
 }
 
+interface DomainItem {
+  domain: string;
+  expanded: boolean;
+  paths: PathItem[];
+}
+
 interface StorageResult {
   mockEnabled?: boolean;
   recordEnabled?: boolean;
   recordedData?: string;
-  domains?: string[];
-  paths?: PathItem[] | string[];
+  domains?: DomainItem[];
 }
 
 interface StorageChanges {
@@ -67,7 +72,6 @@ interface StorageChanges {
   recordEnabled?: chrome.storage.StorageChange;
   recordedData?: chrome.storage.StorageChange;
   domains?: chrome.storage.StorageChange;
-  paths?: chrome.storage.StorageChange;
 }
 
 // 预加载设置
@@ -75,8 +79,7 @@ let settings = {
   mockEnabled: false,
   recordEnabled: false,
   recordedData: {} as RecordedData,
-  domains: [] as string[],
-  paths: [] as PathItem[]
+  domains: [] as DomainItem[]
 };
 
 // 请求体存储
@@ -109,48 +112,13 @@ chrome.action.onClicked.addListener(() => {
   clearBlockedCount();
 });
 
-// 辅助函数：将值转换为数组
-const toArray = <T>(value: any): T[] => {
-  if (Array.isArray(value)) {
-    return value as T[];
-  }
-  if (typeof value === 'object' && value !== null) {
-    if ('length' in value && typeof value.length === 'number') {
-      const arr: T[] = [];
-      for (let i = 0; i < value.length; i++) {
-        if (i in value) {
-          arr.push(value[i]);
-        }
-      }
-      return arr;
-    }
-    return Object.values(value) as T[];
-  }
-  return [];
-};
-
-// 辅助函数：解析 paths（兼容旧数据）
-const parsePaths = (paths: PathItem[] | string[] | undefined): PathItem[] => {
-  if (!paths || !Array.isArray(paths)) {
-    return [];
-  }
-  if (paths.length > 0 && typeof paths[0] === 'object' && 'path' in paths[0]) {
-    return (paths as PathItem[]).map(p => ({
-      ...p,
-      mockEnabled: typeof p.mockEnabled === 'boolean' ? p.mockEnabled : true
-    }));
-  }
-  return (paths as string[]).map((path: string) => ({ path, recordEnabled: true, mockEnabled: true }));
-};
-
 // 加载设置
-chrome.storage.local.get(['mockEnabled', 'recordEnabled', 'recordedData', 'domains', 'paths'], (result: StorageResult) => {
+chrome.storage.local.get(['mockEnabled', 'recordEnabled', 'recordedData', 'domains'], (result: StorageResult) => {
   settings = {
     mockEnabled: typeof result.mockEnabled === 'boolean' ? result.mockEnabled : false,
     recordEnabled: typeof result.recordEnabled === 'boolean' ? result.recordEnabled : false,
     recordedData: result.recordedData ? JSON.parse(result.recordedData as string) : {},
-    domains: toArray<string>(result.domains),
-    paths: parsePaths(toArray<PathItem>(result.paths))
+    domains: result.domains ? JSON.parse(result.domains as unknown as string) : [] as DomainItem[]
   };
 
   updateMockRules();
@@ -174,13 +142,8 @@ chrome.storage.onChanged.addListener((changes: StorageChanges) => {
   }
   if (changes.domains) {
     mockLogger.log('DOMAIN 发生变化', changes.domains.newValue);
-    settings.domains = toArray<string>(changes.domains.newValue);
+    settings.domains = (changes.domains.newValue as DomainItem[]) || [];
     updateMockRules();
-  }
-  if (changes.paths) {
-    mockLogger.log('PATH 发生变化', changes.paths.newValue);
-    updateMockRules();
-    settings.paths = parsePaths(toArray<PathItem>(changes.paths.newValue as PathItem[] | string[]));
   }
 });
 
@@ -195,10 +158,12 @@ function generateMockRules(): chrome.declarativeNetRequest.Rule[] {
 
   let ruleId = 1;
 
-  for (const domain of settings.domains) {
-    for (const pathItem of settings.paths) {
+  for (const domainItem of settings.domains) {
+    const domain = domainItem.domain;
+    for (const pathItem of domainItem.paths) {
       const path = pathItem.path;
       const key = `${domain}${path}`;
+      mockLogger.log('当前路径', key)
       if (pathItem.mockEnabled && settings.recordedData[key]) {
         const mockData = settings.recordedData[key].response;
         const urlPattern = `*://${domain}${path}*`;
@@ -228,6 +193,8 @@ function generateMockRules(): chrome.declarativeNetRequest.Rule[] {
 // 更新 mock 规则
 function updateMockRules() {
   const rules = generateMockRules();
+
+  mockLogger.log('更新 mock 规则', rules);
 
   return chrome.declarativeNetRequest.getDynamicRules()
     .then((existingRules) => {
@@ -288,58 +255,67 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
     const path = url.pathname;
 
     const recordEnabled = settings.recordEnabled;
-    const currentDomains = settings.domains;
-    const currentPathItems = settings.paths;
     const recordedData = settings.recordedData;
 
-    const isDomainMatched = currentDomains.includes(domain);
-    const pathItem = currentPathItems.find(p => p.path === path);
-    const isPathMatched = !!pathItem;
+    // mockLogger.log('当前数据', domain, path)
 
-    if (recordEnabled && isDomainMatched && isPathMatched && pathItem?.recordEnabled) {
-
-      const requestHeadersObj: Record<string, string> = {};
-      if (details.requestHeaders) {
-        details.requestHeaders.forEach(header => {
-          if (header.name && header.value) {
-            requestHeadersObj[header.name] = header.value;
-          }
-        });
-      }
-
-      fetch(details.url, {
-        method: details.method,
-        
-        headers: requestHeadersObj,
-        body: details.documentId ? requestBodyMap.get(details.documentId): undefined,
-      })
-        .then(response => response.json())
-        .then(data => {
-          const key = `${domain}${path}`;
-          const updatedData = {
-            ...recordedData,
-            [key]: {
-              url: details.url,
-              method: details.method,
-              request: {},
-              response: data,
-              timestamp: Date.now()
-            }
-          };
-
-          chrome.storage.local.set({ recordedData: JSON.stringify(updatedData) });
-
-          mockLogger.log(`${url}: 记录成功`)
-        })
-        .catch(err => {
-          mockLogger.error('Failed to record response:', err);
-        }).finally(() => {
-          if(details.documentId) {
-            requestBodyMap.delete(details.documentId);
-          }
-
-        })
+    // 在新结构中查找匹配的域名和路径
+    const domainItem = settings.domains.find(d => d.domain === domain);
+    const pathItem = domainItem?.paths.find(p => p.path === path);
+    // if (!domainItem) {
+    //   mockLogger.log('未找到匹配的域名');
+    //   return;
+    // }
+    // if(!pathItem) {
+    //   mockLogger.log('未找到匹配的路径');
+    //   return;
+    // }
+    if (!recordEnabled || !pathItem || !pathItem.recordEnabled) {
+      // mockLogger.log('当前请求未启用记录', recordEnabled, pathItem, domainItem);
+      return;
     }
+
+    const requestHeadersObj: Record<string, string> = {};
+    if (details.requestHeaders) {
+      details.requestHeaders.forEach(header => {
+        if (header.name && header.value) {
+          requestHeadersObj[header.name] = header.value;
+        }
+      });
+    }
+
+    fetch(details.url, {
+      method: details.method,
+      
+      headers: requestHeadersObj,
+      body: details.documentId ? requestBodyMap.get(details.documentId): undefined,
+    })
+      .then(response => response.json())
+      .then(data => {
+        const key = `${domain}${path}`;
+        const updatedData = {
+          ...recordedData,
+          [key]: {
+            url: details.url,
+            method: details.method,
+            request: {},
+            response: data,
+            timestamp: Date.now()
+          }
+        };
+
+        chrome.storage.local.set({ recordedData: JSON.stringify(updatedData) });
+
+        mockLogger.log(`${url}: 记录成功`)
+      })
+      .catch(err => {
+        mockLogger.error('Failed to record response:', err);
+      }).finally(() => {
+        if(details.documentId) {
+          requestBodyMap.delete(details.documentId);
+        }
+
+      })
     
     return undefined
   },
@@ -355,14 +331,15 @@ chrome.webRequest.onBeforeRequest.addListener(
     const path = url.pathname;
 
     const recordEnabled = settings.recordEnabled;
-    const currentDomains = settings.domains;
-    const currentPathItems = settings.paths;
 
-    const isDomainMatched = currentDomains.includes(domain);
-    const pathItem = currentPathItems.find(p => p.path === path);
-    const isPathMatched = !!pathItem;
+    // 在新结构中查找匹配的域名和路径
+    const domainItem = settings.domains.find(d => d.domain === domain);
+    if (!domainItem) {
+      return undefined;
+    }
+    const pathItem = domainItem.paths.find(p => p.path === path);
 
-    if (!recordEnabled || !isDomainMatched || !isPathMatched || !pathItem?.recordEnabled) {
+    if (!recordEnabled || !pathItem || !pathItem.recordEnabled) {
       return undefined;
     }
 
