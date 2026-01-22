@@ -189,6 +189,7 @@ function generateMockRules(): chrome.declarativeNetRequest.Rule[] {
   const rules: chrome.declarativeNetRequest.Rule[] = [];
 
   if (!settings.mockEnabled) {
+    mockLogger.log('当前拦截已关闭')
     return rules;
   }
 
@@ -237,7 +238,7 @@ function updateMockRules() {
       });
     })
     .then(() => {
-      mockLogger.log('Mock 规则已更新，规则数量:', rules.length);
+      mockLogger.log('Mock 规则已更新，规则数量:', rules.length, rules);
     })
     .catch((err) => {
       mockLogger.error('更新 mock 规则失败:', err);
@@ -327,6 +328,8 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
           };
 
           chrome.storage.local.set({ recordedData: JSON.stringify(updatedData) });
+
+          mockLogger.log(`${url}: 记录成功`)
         })
         .catch(err => {
           mockLogger.error('Failed to record response:', err);

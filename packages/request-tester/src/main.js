@@ -245,22 +245,22 @@ elements.resultContent.innerHTML = `<pre class="json-highlight">${jsonHighlight(
 // 开始发送请求
 function startSending() {
 
-  fetch('https://developer.233xyx.com/developer-web/developer/apk/game/list', {
-    method: 'POST',
-    body: JSON.stringify({"fuzzyGameName":"","pageNum":1,"pageSize":100}),
-      headers: {
-        '233auth': '26fb358957c847a98360c80eb0bf0722',
-        'Content-Type': 'application/json'
-      }
-  }).then(data => {
-    return data.json();
-  }).then(jsonData => {
-    console.log('开发者 请求成功:', jsonData, Array.from(jsonData.data.dataList));
-  }).catch(error => {
-    console.error('开发者 请求失败:', error);
-  }).finally(() => {
-    console.log('开发者 finally')
-  })
+  // fetch('https://developer.233xyx.com/developer-web/developer/apk/game/list', {
+  //   method: 'POST',
+  //   body: JSON.stringify({"fuzzyGameName":"","pageNum":1,"pageSize":100}),
+  //     headers: {
+  //       '233auth': '26fb358957c847a98360c80eb0bf0722',
+  //       'Content-Type': 'application/json'
+  //     }
+  // }).then(data => {
+  //   return data.json();
+  // }).then(jsonData => {
+  //   console.log('开发者 请求成功:', jsonData, Array.from(jsonData.data.dataList));
+  // }).catch(error => {
+  //   console.error('开发者 请求失败:', error);
+  // }).finally(() => {
+  //   console.log('开发者 finally')
+  // })
   
   // 重置状态
   isSending = true;

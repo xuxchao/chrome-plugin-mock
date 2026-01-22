@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 
 interface RequestBody {
   [key: string]: any;
@@ -40,6 +40,8 @@ import { mockLogger } from './utils';
 // 状态管理
 const domains = ref<string[]>([]);
 const newDomain = ref('');
+const domainSearch = ref('');
+
 interface PathItem {
   path: string;
   recordEnabled: boolean;
@@ -47,6 +49,17 @@ interface PathItem {
 }
 const paths = ref<PathItem[]>([]);
 const newPath = ref('');
+const pathSearch = ref('');
+
+const filteredDomains = computed(() => {
+  if (!domainSearch.value) return domains.value;
+  return domains.value.filter(d => d.toLowerCase().includes(domainSearch.value.toLowerCase()));
+});
+
+const filteredPaths = computed(() => {
+  if (!pathSearch.value) return paths.value;
+  return paths.value.filter(p => p.path.toLowerCase().includes(pathSearch.value.toLowerCase()));
+});
 const recordEnabled = ref(false);
 const mockEnabled = ref(false);
 const recordedData = ref<RecordedData>({});
@@ -251,83 +264,9 @@ const onMockEnabledChange = () => {
   <div class="app-container">
     <h1 class="app-title">Mock Data Tool</h1>
     
-    <!-- 功能区 -->
-    <div class="features-grid">
-      <!-- 域名管理 -->
-      <div class="feature-card">
-        <h2 class="feature-title">域名管理</h2>
-        <div class="input-group">
-          <input 
-            v-model="newDomain" 
-            type="text" 
-            placeholder="输入域名 (e.g., example.com)" 
-            class="text-input"
-            @keyup.enter="addDomain"
-          />
-          <button @click="addDomain" class="add-btn">添加</button>
-        </div>
-        <div class="domain-list">
-          <div 
-            v-for="domain in domains" 
-            :key="domain"
-            class="domain-item"
-          >
-            <span class="domain-name">{{ domain }}</span>
-            <button @click="removeDomain(domain)" class="remove-btn">删除</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 路径管理 -->
-      <div class="feature-card">
-        <h2 class="feature-title">路径管理</h2>
-        <div class="input-group">
-          <input 
-            v-model="newPath" 
-            type="text" 
-            placeholder="输入路径 (e.g., /api/data)" 
-            class="text-input"
-            @keyup.enter="addPath"
-          />
-          <button @click="addPath" class="add-btn">添加</button>
-        </div>
-        <div class="path-list">
-          <div 
-            v-for="pathItem in paths" 
-            :key="pathItem.path"
-            class="path-item"
-          >
-            <div class="path-info">
-              <span class="path-name">{{ pathItem.path }}</span>
-              <label class="path-switch-label">
-                <span class="path-switch-text">记录</span>
-                <input 
-                  v-model="pathItem.recordEnabled" 
-                  type="checkbox" 
-                  class="toggle-switch"
-                  @change="onPathRecordEnabledChange(pathItem)"
-                />
-                <span class="toggle-slider"></span>
-              </label>
-              <label class="path-switch-label">
-                <span class="path-switch-text">拦截</span>
-                <input 
-                  v-model="pathItem.mockEnabled" 
-                  type="checkbox" 
-                  class="toggle-switch"
-                  @change="onPathMockEnabledChange(pathItem)"
-                />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <button @click="removePath(pathItem.path)" class="remove-btn">删除</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 开关控制 -->
-      <div class="feature-card">
-        <h2 class="feature-title">功能开关</h2>
+    <!-- 功能开关 -->
+    <div class="feature-card header-switches">
+      <div class="switch-row">
         <div class="switch-group">
           <label class="switch-label">
             <span class="switch-text">数据记录</span>
@@ -355,13 +294,102 @@ const onMockEnabledChange = () => {
       </div>
     </div>
 
+    <!-- 功能区 -->
+    <div class="features-grid">
+      <!-- 域名管理 -->
+      <div class="feature-card">
+        <div class="feature-header">
+          <h2 class="feature-title">域名管理</h2>
+          <input 
+            v-model="domainSearch" 
+            type="text" 
+            placeholder="搜索域名..." 
+            class="search-input"
+          />
+        </div>
+        <div class="input-group">
+          <input 
+            v-model="newDomain" 
+            type="text" 
+            placeholder="输入域名 (e.g., example.com)" 
+            class="text-input"
+            @keyup.enter="addDomain"
+          />
+          <button @click="addDomain" class="add-btn">添加</button>
+        </div>
+        <div class="domain-list">
+          <div 
+            v-for="domain in filteredDomains" 
+            :key="domain"
+            class="domain-item"
+          >
+            <span class="domain-name" :title="domain">{{ domain }}</span>
+            <button @click="removeDomain(domain)" class="remove-btn">删除</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 路径管理 -->
+      <div class="feature-card">
+        <div class="feature-header">
+          <h2 class="feature-title">路径管理</h2>
+          <input 
+            v-model="pathSearch" 
+            type="text" 
+            placeholder="搜索路径..." 
+            class="search-input"
+          />
+        </div>
+        <div class="input-group">
+          <input 
+            v-model="newPath" 
+            type="text" 
+            placeholder="输入路径 (e.g., /api/data)" 
+            class="text-input"
+            @keyup.enter="addPath"
+          />
+          <button @click="addPath" class="add-btn">添加</button>
+        </div>
+        <div class="path-list">
+          <div 
+            v-for="pathItem in filteredPaths" 
+            :key="pathItem.path"
+            class="path-item"
+          >
+            <div class="path-info">
+              <span class="path-name" :title="pathItem.path">{{ pathItem.path }}</span>
+              <div class="path-controls">
+                <label class="path-switch-label">
+                  <span class="path-switch-text">记录</span>
+                  <input 
+                    v-model="pathItem.recordEnabled" 
+                    type="checkbox" 
+                    class="toggle-switch"
+                    @change="onPathRecordEnabledChange(pathItem)"
+                  />
+                  <span class="toggle-slider"></span>
+                </label>
+                <label class="path-switch-label">
+                  <span class="path-switch-text">拦截</span>
+                  <input 
+                    v-model="pathItem.mockEnabled" 
+                    type="checkbox" 
+                    class="toggle-switch"
+                    @change="onPathMockEnabledChange(pathItem)"
+                  />
+                  <span class="toggle-slider"></span>
+                </label>
+                <button @click="removePath(pathItem.path)" class="remove-btn">删除</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 数据管理 -->
     <div class="feature-card full-width">
       <h2 class="feature-title">数据管理</h2>
-      <div v-if="!recordEnabled" class="record-disabled-notice">
-        <span class="notice-icon">⚠️</span>
-        <span>数据记录已关闭，新请求将不会被记录</span>
-      </div>
       <div class="data-management">
         <div class="recorded-list">
           <h3 class="section-title">已记录的数据</h3>
@@ -400,37 +428,81 @@ const onMockEnabledChange = () => {
 <style scoped>
 /* 全局样式 */
 .app-container {
-  width: 600px;
-  height: 600px;
-  padding: 20px;
+  width: 500px;
+  /* height: 1200px; */
+  /* margin: 5vh auto; */
+  padding: 30px;
   background-color: #1a1a1a;
   color: #ffffff;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   overflow: auto;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
 /* 标题样式 */
 .app-title {
-  margin: 0 0 20px 0;
-  font-size: 24px;
+  margin: 0 0 25px 0;
+  font-size: 28px;
   font-weight: bold;
   color: #3498db;
   text-align: center;
 }
 
+/* 顶部开关 */
+.header-switches {
+  margin-bottom: 25px;
+  border-bottom: 2px solid #3498db;
+}
+
+.switch-row {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 40px;
+}
+
+.feature-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.search-input {
+  width: 150px;
+  padding: 6px 12px;
+  background-color: #3d3d3d;
+  border: 1px solid #555;
+  border-radius: 20px;
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #3498db;
+}
+
 /* 功能卡片 */
 .features-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
+  grid-template-columns: 1fr;
+  gap: 25px;
+  margin-bottom: 25px;
 }
 
 .feature-card {
-  background-color: #2d2d2d;
-  border-radius: 8px;
+  background-color: #242424;
+  border-radius: 10px;
   padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 1px solid #333;
+  transition: all 0.3s ease;
+}
+
+.feature-card:hover {
+  border-color: #444;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .feature-card.full-width {
@@ -438,8 +510,8 @@ const onMockEnabledChange = () => {
 }
 
 .feature-title {
-  margin: 0 0 15px 0;
-  font-size: 18px;
+  margin: 0;
+  font-size: 20px;
   font-weight: 600;
   color: #3498db;
 }
@@ -447,16 +519,16 @@ const onMockEnabledChange = () => {
 /* 输入组 */
 .input-group {
   display: flex;
-  gap: 10px;
-  margin-bottom: 15px;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .text-input {
   flex: 1;
-  padding: 10px;
-  background-color: #3d3d3d;
-  border: 1px solid #555;
-  border-radius: 4px;
+  padding: 12px;
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 6px;
   color: #ffffff;
   font-size: 14px;
 }
@@ -469,9 +541,9 @@ const onMockEnabledChange = () => {
 
 /* 按钮样式 */
 .add-btn, .remove-btn, .control-btn, .save-btn {
-  padding: 10px 15px;
+  padding: 10px 18px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -485,72 +557,107 @@ const onMockEnabledChange = () => {
 
 .add-btn:hover {
   background-color: #2980b9;
+  transform: translateY(-1px);
 }
 
 .remove-btn {
-  background-color: #e74c3c;
-  color: white;
-  padding: 5px 10px;
+  background-color: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  padding: 6px 12px;
   font-size: 12px;
 }
 
 .remove-btn:hover {
-  background-color: #c0392b;
+  background-color: #e74c3c;
+  color: white;
 }
 
 .control-btn {
-  background-color: #95a5a6;
-  color: white;
-  margin-right: 10px;
+  background-color: #444;
+  color: #eee;
 }
 
 .control-btn:hover {
-  background-color: #7f8c8d;
+  background-color: #555;
 }
 
 .save-btn {
-  background-color: #2ecc71;
+  background-color: #27ae60;
   color: white;
-  margin-top: 10px;
+  margin-top: 15px;
   width: 100%;
+  font-weight: 600;
+  letter-spacing: 1px;
 }
 
 .save-btn:hover {
-  background-color: #27ae60;
+  background-color: #2ecc71;
+  box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
 }
 
 /* 列表样式 */
 .domain-list, .path-list {
-  max-height: 150px;
+  max-height: 250px;
   overflow-y: auto;
+  padding-right: 5px;
 }
 
 .domain-item, .path-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px;
-  background-color: #3d3d3d;
-  border-radius: 4px;
-  margin-bottom: 8px;
+  padding: 12px 15px;
+  background-color: #2d2d2d;
+  border: 1px solid #333;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  transition: all 0.2s ease;
+}
+
+.domain-item:hover, .path-item:hover {
+  background-color: #333;
+  border-color: #444;
 }
 
 .path-item {
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
+  gap: 12px;
 }
 
 .path-info {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 15px;
+}
+
+.path-controls {
+  display: flex;
+  gap: 15px;
+}
+
+.domain-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #eee;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 10px;
 }
 
 .path-name {
   font-size: 14px;
-  word-break: break-all;
+  font-weight: 500;
+  color: #eee;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 10px;
 }
 
 .path-switch-label {
@@ -567,19 +674,20 @@ const onMockEnabledChange = () => {
 
 /* 开关样式 */
 .switch-group {
-  margin-bottom: 15px;
+  margin: 0;
 }
 
 .switch-label {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 15px;
   cursor: pointer;
 }
 
 .switch-text {
   font-size: 16px;
   font-weight: 500;
+  color: #ddd;
 }
 
 .toggle-switch {
@@ -589,18 +697,18 @@ const onMockEnabledChange = () => {
 .toggle-slider {
   position: relative;
   display: inline-block;
-  width: 50px;
-  height: 24px;
-  background-color: #555;
-  border-radius: 24px;
+  width: 44px;
+  height: 22px;
+  background-color: #444;
+  border-radius: 22px;
   transition: all 0.3s ease;
 }
 
 .toggle-slider:before {
   position: absolute;
   content: "";
-  height: 18px;
-  width: 18px;
+  height: 16px;
+  width: 16px;
   left: 3px;
   bottom: 3px;
   background-color: white;
@@ -613,15 +721,15 @@ const onMockEnabledChange = () => {
 }
 
 .toggle-switch:checked + .toggle-slider:before {
-  transform: translateX(26px);
+  transform: translateX(22px);
 }
 
 /* 数据管理样式 */
 .data-management {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  height: 300px;
+  gap: 25px;
+  height: 400px;
 }
 
 .section-title {
